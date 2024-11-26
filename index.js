@@ -17,7 +17,7 @@ const openai = new OpenAI({
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 
-// Konfigurer multer for å motta lydfiler
+// Konfigurer multer for å håndtere opplastede filer
 const upload = multer({ dest: 'uploads/' });
 
 // Middleware
@@ -35,6 +35,7 @@ app.post('/chat', async (req, res) => {
         const { message } = req.body;
 
         if (!message) {
+            console.error('Ingen melding mottatt i forespørselen.');
             return res.status(400).json({ error: 'Melding mangler i forespørselen.' });
         }
 
@@ -42,6 +43,8 @@ app.post('/chat', async (req, res) => {
 
         // Opprett en thread i OpenAI
         const thread = await openai.beta.threads.create();
+        console.log('Thread opprettet:', thread);
+
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
             content: message,
@@ -50,15 +53,21 @@ app.post('/chat', async (req, res) => {
         const run = await openai.beta.threads.runs.create(thread.id, {
             assistant_id: ASSISTANT_ID,
         });
+        console.log('Run opprettet:', run);
 
         // Vent på at OpenAI-assistenten fullfører
         let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
         while (runStatus.status !== 'completed') {
+            console.log('Run status:', runStatus.status);
             await new Promise((resolve) => setTimeout(resolve, 1000));
             runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+
+            if (runStatus.status === 'failed') {
+                throw new Error('OpenAI kjøringen feilet.');
+            }
         }
 
-        // Hent OpenAI-svaret
+        // Hent svaret fra OpenAI
         const messages = await openai.beta.threads.messages.list(thread.id);
         const lastMessage = messages.data[0];
         const assistantResponse = lastMessage?.content?.[0]?.text?.value || 'Ingen respons mottatt.';
@@ -67,26 +76,26 @@ app.post('/chat', async (req, res) => {
 
         res.json({ response: assistantResponse });
     } catch (error) {
-        console.error('Feil i /chat:', error);
+        console.error('Feil i /chat-endepunktet:', error);
         res.status(500).json({ error: 'Noe gikk galt under behandling av forespørselen.' });
     }
 });
 
-// Endepunkt for lydmeldinger
+// Endepunkt for lydmeldinger (hvis aktuelt)
 app.post('/audio-chat', upload.single('audio'), async (req, res) => {
     try {
         if (!req.file) {
+            console.error('Ingen lydfil mottatt i forespørselen.');
             return res.status(400).json({ error: 'Ingen lydfil mottatt.' });
         }
 
         console.log('Mottok lydfil:', req.file);
 
-        // Transkriber lyd til tekst (pseudo, da ElevenLabs ikke har spesifikk implementasjon i koden din)
-        const userMessage = "Dette er en transkribert melding"; // Placeholder
-
+        // Transkriber lyd til tekst (placeholder for transkripsjon)
+        const userMessage = "Dette er en transkribert melding"; // Bruk ElevenLabs eller Whisper for faktisk transkripsjon
         console.log('Transkribert tekst:', userMessage);
 
-        // Opprett en thread i OpenAI
+        // Send til OpenAI
         const thread = await openai.beta.threads.create();
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
@@ -97,14 +106,17 @@ app.post('/audio-chat', upload.single('audio'), async (req, res) => {
             assistant_id: ASSISTANT_ID,
         });
 
-        // Vent på at OpenAI fullfører
         let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
         while (runStatus.status !== 'completed') {
+            console.log('Run status:', runStatus.status);
             await new Promise((resolve) => setTimeout(resolve, 1000));
             runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+
+            if (runStatus.status === 'failed') {
+                throw new Error('OpenAI kjøringen feilet.');
+            }
         }
 
-        // Hent OpenAI-svaret
         const messages = await openai.beta.threads.messages.list(thread.id);
         const lastMessage = messages.data[0];
         const assistantResponse = lastMessage?.content?.[0]?.text?.value || 'Ingen respons mottatt.';
@@ -116,7 +128,7 @@ app.post('/audio-chat', upload.single('audio'), async (req, res) => {
         // Slett midlertidig lydfil
         fs.unlinkSync(req.file.path);
     } catch (error) {
-        console.error('Feil i /audio-chat:', error);
+        console.error('Feil i /audio-chat-endepunktet:', error);
         res.status(500).json({ error: 'Noe gikk galt under behandling av forespørselen.' });
     }
 });
