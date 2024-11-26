@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import fs from 'fs';
 import { OpenAI } from 'openai';
-import ElevenLabs from 'elevenlabs-api';
 
 dotenv.config();
 
@@ -30,13 +29,18 @@ app.get('/', (req, res) => {
     res.json({ status: 'OpenAI ElevenLabs Bridge is running' });
 });
 
-// Endepunkt for tekstmeldinger (hvis ElevenLabs sender tekst direkte)
+// Endepunkt for tekstmeldinger
 app.post('/chat', async (req, res) => {
     try {
         const { message } = req.body;
+
+        if (!message) {
+            return res.status(400).json({ error: 'Melding mangler i forespørselen.' });
+        }
+
         console.log('Mottok melding:', message);
 
-        // Send meldingen til OpenAI
+        // Opprett en thread i OpenAI
         const thread = await openai.beta.threads.create();
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
@@ -47,43 +51,42 @@ app.post('/chat', async (req, res) => {
             assistant_id: ASSISTANT_ID,
         });
 
-        // Vent på at OpenAI fullfører
+        // Vent på at OpenAI-assistenten fullfører
         let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
         while (runStatus.status !== 'completed') {
             await new Promise((resolve) => setTimeout(resolve, 1000));
             runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
         }
 
-        // Hent svaret fra OpenAI
+        // Hent OpenAI-svaret
         const messages = await openai.beta.threads.messages.list(thread.id);
         const lastMessage = messages.data[0];
-        const assistantResponse = lastMessage.content[0].text.value;
+        const assistantResponse = lastMessage?.content?.[0]?.text?.value || 'Ingen respons mottatt.';
 
         console.log('OpenAI svar:', assistantResponse);
 
-        // Returner svaret til ElevenLabs-agenten
         res.json({ response: assistantResponse });
     } catch (error) {
         console.error('Feil i /chat:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Noe gikk galt under behandling av forespørselen.' });
     }
 });
 
-// Endepunkt for lydmeldinger (hvis ElevenLabs sender lyd som input)
+// Endepunkt for lydmeldinger
 app.post('/audio-chat', upload.single('audio'), async (req, res) => {
     try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'Ingen lydfil mottatt.' });
+        }
+
         console.log('Mottok lydfil:', req.file);
 
-        // Transkriber lyd til tekst med ElevenLabs
-        const transcription = await ElevenLabs.transcribe({
-            audio: fs.createReadStream(req.file.path),
-            language: 'no', // Norsk
-        });
+        // Transkriber lyd til tekst (pseudo, da ElevenLabs ikke har spesifikk implementasjon i koden din)
+        const userMessage = "Dette er en transkribert melding"; // Placeholder
 
-        const userMessage = transcription.transcription;
         console.log('Transkribert tekst:', userMessage);
 
-        // Send teksten til OpenAI
+        // Opprett en thread i OpenAI
         const thread = await openai.beta.threads.create();
         await openai.beta.threads.messages.create(thread.id, {
             role: 'user',
@@ -101,24 +104,24 @@ app.post('/audio-chat', upload.single('audio'), async (req, res) => {
             runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
         }
 
-        // Hent svaret fra OpenAI
+        // Hent OpenAI-svaret
         const messages = await openai.beta.threads.messages.list(thread.id);
         const lastMessage = messages.data[0];
-        const assistantResponse = lastMessage.content[0].text.value;
+        const assistantResponse = lastMessage?.content?.[0]?.text?.value || 'Ingen respons mottatt.';
 
         console.log('OpenAI svar:', assistantResponse);
 
-        // Returner tekstsvaret til ElevenLabs-agenten
         res.json({ response: assistantResponse });
 
         // Slett midlertidig lydfil
         fs.unlinkSync(req.file.path);
     } catch (error) {
         console.error('Feil i /audio-chat:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Noe gikk galt under behandling av forespørselen.' });
     }
 });
 
+// Start serveren
 app.listen(port, () => {
     console.log(`Server kjører på port ${port}`);
 });
