@@ -11,11 +11,6 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Helsesjekk-endepunkt
-app.get('/', (req, res) => {
-    res.json({ status: 'OpenAI ElevenLabs Bridge is running' });
-});
-
 // Endepunkt for ElevenLabs-kompatibel API
 app.post('/v1/chat/completions', async (req, res) => {
     try {
@@ -27,26 +22,21 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         console.log('Mottok forespørsel:', messages);
 
-        // Send forespørselen til OpenAI med korrekt URL
-        const openaiResponse = await fetch(`https://api.openai.com/v1/assistants/${process.env.ASSISTANT_ID}/runs`, {
+        // Send forespørselen til OpenAI
+        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
             },
             body: JSON.stringify({
-                messages,
                 model,
+                messages,
                 temperature,
                 max_tokens,
+                function_call: 'auto', // La OpenAI håndtere funksjonskall
             }),
         });
-
-        if (!openaiResponse.ok) {
-            const error = await openaiResponse.json();
-            console.error('Feil fra OpenAI:', error);
-            return res.status(openaiResponse.status).json({ error });
-        }
 
         const jsonResponse = await openaiResponse.json();
         console.log('Respons fra OpenAI:', jsonResponse);
