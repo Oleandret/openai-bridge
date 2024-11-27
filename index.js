@@ -14,7 +14,7 @@ app.use(express.json());
 // Endepunkt for ElevenLabs-kompatibel API
 app.post('/v1/chat/completions', async (req, res) => {
     try {
-        const { messages, model = 'gpt-4', temperature = 0.7, max_tokens = 1000 } = req.body;
+        const { messages, temperature = 0.7, max_tokens = 1000 } = req.body;
 
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: 'Meldinger mangler eller er i feil format.' });
@@ -22,19 +22,17 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         console.log('Mottok forespørsel:', messages);
 
-        // Send forespørselen til OpenAI
-        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        // Send forespørselen til OpenAI for spesifikk assistent
+        const openaiResponse = await fetch(`https://api.openai.com/v1/assistants/${process.env.ASSISTANT_ID}/runs`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
             },
             body: JSON.stringify({
-                model,
                 messages,
                 temperature,
                 max_tokens,
-                function_call: 'auto', // La OpenAI håndtere funksjonskall
             }),
         });
 
